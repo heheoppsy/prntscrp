@@ -4,16 +4,17 @@
 
 <h1 align="center">prntscrp</h1>
 
-<p align="center">Self-hosted screenshot archiver for <a href="https://prnt.sc">prnt.sc</a>.<br>Discovers, downloads, OCRs, and catalogs random screenshots through proxies.</p>
+<p align="center">Self-hosted screenshot archiver for <a href="https://prnt.sc">prnt.sc</a>.<br>Scrapes, downloads, and indexes random screenshots through proxies.</p>
 
 ## Features
 
-- **Scraper** - discovers screenshot URLs via randomized IDs through SOCKS proxies
-- **Downloader** - fetches images, validates against known placeholders, deduplicates by hash
-- **OCR** - extracts text from images using EasyOCR, filters against a configurable blacklist
-- **Web UI** - SvelteKit frontend with gallery, lightbox, full-text + regex search, admin panel
-- **Admin** - start/stop workers, manage proxies, blacklist patterns, users, and all settings from the browser
-- **SQLite** - single-file database with FTS5 search, WAL mode for concurrency
+- **Scraper** — finds screenshot URLs by generating random IDs and hitting prnt.sc through SOCKS proxies
+- **Downloader** — grabs the actual images, checks for placeholders and duplicates via SHA-256
+- **OCR** — reads text from images using [docTR](https://github.com/mindee/doctr) (or EasyOCR as a fallback), with configurable blacklist filtering
+- **Search** — full-text and regex search over extracted text, powered by SQLite FTS5
+- **Gallery** — SvelteKit frontend with image grid, lightbox viewer, advanced filters, and sorting
+- **Admin panel** — manage workers, proxies, users, blacklist, OCR engine, and all settings from the browser
+- **Single-file database** — everything in one SQLite file with WAL mode for concurrent access
 
 ## Screenshots
 
@@ -49,23 +50,40 @@ cd frontend && npm install && cd ..
 ./run.sh
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Default login is `admin` / `changeme`
+Open [http://localhost:5173](http://localhost:5173). Default login is `admin` / `changeme`.
+
+Start the scraper, downloader, and OCR workers from the admin panel (Processes tab).
 
 ## Configuration
 
-All settings are configurable from the admin panel (Settings tab). Key options:
+All settings are configurable from the admin panel (Settings tab), grouped by component:
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `scraper_threads` | 5 | Number of scraper workers |
-| `downloader_threads` | 5 | Number of download workers |
-| `ocr_enabled` | true | Enable/disable OCR processing |
-| `ocr_gpu` | false | Use GPU for OCR (requires CUDA) |
-| `ocr_confidence_threshold` | 0.7 | Minimum OCR confidence |
-| `proxy_api_url` | proxyscrape | Proxy list API endpoint |
-| `blocked_hosts` | imgur, imageshack | Hosts to skip downloading from |
+| Group | Setting | Default | Description |
+|-------|---------|---------|-------------|
+| Scraper | `scraper_threads` | 5 | Worker thread count |
+| Scraper | `scraper_delay` | 0.2 | Seconds between requests |
+| Downloader | `downloader_threads` | 5 | Worker thread count |
+| Downloader | `downloader_use_proxy` | true | Route downloads through proxies |
+| OCR | `ocr_engine` | doctr | `doctr` or `easyocr` |
+| OCR | `ocr_enabled` | true | Toggle OCR processing |
+| OCR | `ocr_confidence_threshold` | 0.7 | Minimum confidence to keep text |
+| Proxy | `proxy_api_url` | proxyscrape | Proxy list API endpoint |
 
-Settings can also be set via the database directly in the `settings` table.
+You can also rebuild all OCR data from the settings page after switching engines.
+
+## OCR Engines
+
+**[docTR](https://github.com/mindee/doctr)** (default) — transformer-based, handles mixed fonts and sizes well. Install with:
+```
+pip install "python-doctr[torch]"
+```
+
+**[EasyOCR](https://github.com/JaidedAI/EasyOCR)** — simpler but less accurate on screenshots. Install with:
+```
+pip install easyocr
+```
+
+Switch between them in the admin settings. The app checks if the engine is installed before allowing the switch.
 
 ## Notes
 
@@ -81,6 +99,8 @@ The user account system is there if you'd like to host your archive for a few pe
 | `API_HOST` | `127.0.0.1` | API bind address |
 | `API_PORT` | `8888` | API port |
 | `PYTHON` | `python3` | Python binary for `run.sh` |
+
+Copy `.env.example` to `.env` to configure.
 
 ## License
 

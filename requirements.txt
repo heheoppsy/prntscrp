@@ -4,7 +4,9 @@ flask-cors>=4.0
 werkzeug>=3.0
 requests[socks]>=2.31
 beautifulsoup4>=4.12
-easyocr>=1.7
 Pillow>=10.0
-colorama>=0.4
 pysocks>=1.7
+
+# OCR engines (install at least one)
+python-doctr[torch]>=1.0   # recommended
+# easyocr>=1.7             # alternative

@@ -11,6 +11,7 @@ export interface Screenshot {
 	image_format: string | null;
 	file_size_bytes?: number | null;
 	ocr_text: string | null;
+	ocr_segments?: string | null;
 	discovered_at: string;
 	downloaded_at: string | null;
 }
@@ -189,6 +190,15 @@ export const admin = {
 				method: 'PUT',
 				body: JSON.stringify(settings)
 			})
+	},
+	ocr: {
+		rebuild: () =>
+			request<{ message: string; reset: number }>('/admin/ocr/rebuild', { method: 'POST' }),
+		checkEngine: (engine: string) =>
+			request<{ installed: boolean; engine: string; packages?: string[] }>(
+				'/admin/ocr/check-engine',
+				{ method: 'POST', body: JSON.stringify({ engine }) }
+			)
 	},
 	blacklist: {
 		list: async () => {

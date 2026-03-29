@@ -448,6 +448,72 @@ def update_settings():
     return jsonify({"message": f"Updated {len(updated)} settings", "updated": updated}), 200
 
 
+@admin_bp.route("/ocr/check-engine", methods=["POST"])
+@admin_required
+def check_ocr_engine():
+    """Check if an OCR engine's dependencies are installed."""
+    data = request.get_json(silent=True) or {}
+    engine = data.get("engine", "")
+
+    engines = {
+        "doctr": {
+            "packages": ["python-doctr[torch]"],
+            "check": lambda: __import__("doctr"),
+        },
+        "easyocr": {
+            "packages": ["easyocr"],
+            "check": lambda: __import__("easyocr"),
+        },
+    }
+
+    if engine not in engines:
+        return jsonify({"error": f"Unknown engine: {engine}"}), 400
+
+    info = engines[engine]
+    try:
+        info["check"]()
+        return jsonify({"installed": True, "engine": engine}), 200
+    except ImportError:
+        return jsonify({
+            "installed": False,
+            "engine": engine,
+            "packages": info["packages"],
+        }), 200
+
+
+@admin_bp.route("/ocr/rebuild", methods=["POST"])
+@admin_required
+def rebuild_ocr():
+    """Reset all OCR results so images get re-processed with the current engine."""
+    with database.get_db() as conn:
+        # Reset ocr_complete back to downloaded
+        r1 = conn.execute(
+            """UPDATE screenshots
+               SET state = 'downloaded', ocr_text = NULL, ocr_segments = NULL,
+                   ocr_confidence = NULL, ocr_processed_at = NULL,
+                   claimed_by = NULL, claimed_at = NULL
+               WHERE state = 'ocr_complete' AND local_filename IS NOT NULL
+               RETURNING id"""
+        ).fetchall()
+
+        # Also reset filtered items (they might pass with a better engine)
+        r2 = conn.execute(
+            """UPDATE screenshots
+               SET state = 'downloaded', ocr_text = NULL, ocr_segments = NULL,
+                   ocr_confidence = NULL, ocr_processed_at = NULL,
+                   filter_matched_pattern = NULL,
+                   claimed_by = NULL, claimed_at = NULL
+               WHERE state = 'filtered' AND local_filename IS NOT NULL
+               RETURNING id"""
+        ).fetchall()
+
+    total = len(r1) + len(r2)
+    return jsonify({
+        "message": f"Reset {total} screenshots for re-processing ({len(r1)} complete, {len(r2)} filtered)",
+        "reset": total,
+    }), 200
+
+
 # --- Start/Stop all ---
 
 

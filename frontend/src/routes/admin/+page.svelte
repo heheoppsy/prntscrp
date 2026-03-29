@@ -15,6 +15,8 @@
 	let settingsEdited = $state<Record<string, string>>({});
 	let settingsSaving = $state(false);
 	let settingsMsg = $state('');
+	let rebuildLoading = $state(false);
+	let engineModal = $state<{ engine: string; packages: string[] } | null>(null);
 	let loading = $state(true);
 	let tab = $state<'overview' | 'processes' | 'proxies' | 'blacklist' | 'users' | 'settings'>('overview');
 	let processLoading = $state<Record<string, boolean>>({});
@@ -113,6 +115,37 @@
 			processes = await admin.processes.list();
 		} catch { /* ignore */ }
 		finally { allLoading = false; }
+	}
+
+	async function checkEngineChange(newEngine: string) {
+		if (newEngine === settings['ocr_engine']?.value) {
+			settingsEdited['ocr_engine'] = newEngine;
+			return;
+		}
+		try {
+			const res = await admin.ocr.checkEngine(newEngine);
+			if (res.installed) {
+				settingsEdited['ocr_engine'] = newEngine;
+			} else {
+				engineModal = { engine: newEngine, packages: res.packages || [] };
+			}
+		} catch {
+			settingsEdited['ocr_engine'] = newEngine;
+		}
+	}
+
+	async function rebuildOcr() {
+		if (!confirm('This will clear all OCR text and re-process every image. This can take a long time. Continue?')) return;
+		rebuildLoading = true;
+		settingsMsg = '';
+		try {
+			const res = await admin.ocr.rebuild();
+			settingsMsg = res.message;
+		} catch (err) {
+			settingsMsg = err instanceof ApiError ? err.message : 'failed';
+		} finally {
+			rebuildLoading = false;
+		}
 	}
 
 	async function saveSettings() {
@@ -593,42 +626,97 @@
 			<div class="msg {settingsMsg.includes('fail') ? 'msg-error' : 'msg-success'}">{settingsMsg}</div>
 		{/if}
 
-		<div class="settings-list">
-			{#each Object.entries(settings) as [key, meta]}
-				<div class="setting-row">
-					<div class="setting-info">
-						<label class="setting-key" for="setting-{key}">{key.replace(/_/g, ' ')}</label>
-						<span class="setting-desc">{meta.description}</span>
-					</div>
-					{#if meta.value === 'true' || meta.value === 'false'}
-						<select
-							class="input setting-input"
-							id="setting-{key}"
-							value={settingsEdited[key]}
-							onchange={(e) => { settingsEdited[key] = (e.target as HTMLSelectElement).value; }}
-						>
-							<option value="true">true</option>
-							<option value="false">false</option>
-						</select>
-					{:else}
-						<input
-							class="input setting-input"
-							id="setting-{key}"
-							type="text"
-							value={settingsEdited[key]}
-							oninput={(e) => { settingsEdited[key] = (e.target as HTMLInputElement).value; }}
-						/>
-					{/if}
-				</div>
-			{/each}
-		</div>
+		{@const groups = [
+			{ label: 'Scraper', keys: ['scraper_threads', 'scraper_id_min_length', 'scraper_id_max_length', 'scraper_delay'] },
+			{ label: 'Downloader', keys: ['downloader_threads', 'downloader_use_proxy', 'download_timeout', 'min_image_size', 'blocked_hosts'] },
+			{ label: 'OCR', keys: ['ocr_enabled', 'ocr_engine', 'ocr_gpu', 'ocr_confidence_threshold', 'ocr_languages'] },
+			{ label: 'Proxy', keys: ['proxy_api_url', 'proxy_refresh_interval'] },
+		]}
 
-		<button class="btn btn-primary save-settings-btn" onclick={saveSettings} disabled={settingsSaving}>
-			{settingsSaving ? 'saving...' : 'save settings'}
-		</button>
-		<p class="settings-note">some settings require restarting processes to take effect</p>
+		{#each groups as group}
+			<h2 class="section-title">{group.label}</h2>
+			<div class="settings-list">
+				{#each group.keys as key}
+					{#if settings[key]}
+						{@const meta = settings[key]}
+						<div class="setting-row">
+							<div class="setting-info">
+								<label class="setting-key" for="setting-{key}">{key.replace(/_/g, ' ')}</label>
+								<span class="setting-desc">{meta.description}</span>
+							</div>
+							{#if meta.value === 'true' || meta.value === 'false'}
+								<select
+									class="input setting-input"
+									id="setting-{key}"
+									value={settingsEdited[key]}
+									onchange={(e) => { settingsEdited[key] = (e.target as HTMLSelectElement).value; }}
+								>
+									<option value="true">true</option>
+									<option value="false">false</option>
+								</select>
+							{:else if key === 'ocr_engine'}
+								<select
+									class="input setting-input"
+									id="setting-{key}"
+									value={settingsEdited[key]}
+									onchange={(e) => {
+										const val = (e.target as HTMLSelectElement).value;
+										checkEngineChange(val);
+										// Reset select if modal blocks the change
+										if (engineModal) (e.target as HTMLSelectElement).value = settingsEdited[key];
+									}}
+								>
+									<option value="doctr">docTR</option>
+									<option value="easyocr">EasyOCR</option>
+								</select>
+							{:else}
+								<input
+									class="input setting-input"
+									id="setting-{key}"
+									type="text"
+									value={settingsEdited[key]}
+									oninput={(e) => { settingsEdited[key] = (e.target as HTMLInputElement).value; }}
+								/>
+							{/if}
+						</div>
+					{/if}
+				{/each}
+			</div>
+
+			{#if group.label === 'OCR'}
+				<button
+					class="btn btn-danger rebuild-btn"
+					onclick={rebuildOcr}
+					disabled={rebuildLoading}
+				>
+					{rebuildLoading ? 'rebuilding...' : 'rebuild all OCR'}
+				</button>
+				<p class="settings-note">clears all OCR text and re-queues every image for processing with the current engine</p>
+			{/if}
+		{/each}
+
+		<div class="settings-actions">
+			<button class="btn btn-primary" onclick={saveSettings} disabled={settingsSaving}>
+				{settingsSaving ? 'saving...' : 'save settings'}
+			</button>
+			<p class="settings-note">some settings require restarting processes to take effect</p>
+		</div>
 	{/if}
 </div>
+
+{#if engineModal}
+	<div class="modal-overlay" onclick={() => engineModal = null} role="dialog">
+		<div class="modal" onclick={(e) => e.stopPropagation()}>
+			<h3 class="modal-title">missing dependencies</h3>
+			<p class="modal-text">
+				To switch to <strong>{engineModal.engine}</strong>, install the required package{engineModal.packages.length > 1 ? 's' : ''}:
+			</p>
+			<code class="modal-code">pip install {engineModal.packages.join(' ')}</code>
+			<p class="modal-hint">Then restart the OCR process after changing the setting.</p>
+			<button class="btn" onclick={() => engineModal = null}>ok</button>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.admin-page {
@@ -1060,7 +1148,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		margin-bottom: 14px;
+		margin-bottom: 20px;
 	}
 
 	.setting-row {
@@ -1099,8 +1187,14 @@
 		text-align: right;
 	}
 
-	.save-settings-btn {
-		margin-top: 4px;
+	.settings-actions {
+		margin-top: 16px;
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
+	}
+
+	.rebuild-btn {
+		margin-top: 8px;
 	}
 
 	.settings-note {
@@ -1109,5 +1203,61 @@
 		font-size: 10px;
 		color: var(--text-dimmer);
 		font-style: italic;
+	}
+
+	/* Modal */
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		background: rgba(0, 0, 0, 0.6);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 24px;
+	}
+
+	.modal {
+		max-width: 420px;
+		width: 100%;
+		padding: 20px;
+		background: var(--bg-card);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.modal-title {
+		font-family: "SF Mono", "Menlo", "Consolas", monospace;
+		font-size: 12px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--text-dim);
+	}
+
+	.modal-text {
+		font-size: 13px;
+		color: var(--text);
+		line-height: 1.5;
+	}
+
+	.modal-code {
+		display: block;
+		padding: 8px 10px;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 3px;
+		font-family: "SF Mono", "Menlo", "Consolas", monospace;
+		font-size: 12px;
+		color: var(--accent);
+		user-select: all;
+	}
+
+	.modal-hint {
+		font-size: 11px;
+		color: var(--text-dimmer);
 	}
 </style>

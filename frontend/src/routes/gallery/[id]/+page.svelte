@@ -9,6 +9,23 @@
 	let loading = $state(true);
 	let error = $state('');
 	let currentUser = $state<{ role: string } | null>(null);
+	let showDetections = $state(false);
+
+	interface OcrSegment {
+		text: string;
+		confidence: number;
+		bbox?: number[][];
+	}
+
+	function getSegments(): OcrSegment[] {
+		if (!screenshot?.ocr_segments) return [];
+		try {
+			const parsed = typeof screenshot.ocr_segments === 'string'
+				? JSON.parse(screenshot.ocr_segments)
+				: screenshot.ocr_segments;
+			return parsed.filter((s: OcrSegment) => s.bbox);
+		} catch { return []; }
+	}
 
 	onMount(() => {
 		user.subscribe((u) => (currentUser = u));
@@ -67,11 +84,37 @@
 	{:else if screenshot}
 		<div class="detail-layout">
 			<div class="image-panel">
-				<img
-					src={imageUrl(screenshot.local_filename)}
-					alt={screenshot.id}
-					class="detail-image"
-				/>
+				<div class="image-wrap">
+					<img
+						src={imageUrl(screenshot.local_filename)}
+						alt={screenshot.id}
+						class="detail-image"
+					/>
+					{#if showDetections}
+						{@const segments = getSegments()}
+						{#each segments as seg}
+							{#if seg.bbox}
+								{@const isRatio = seg.bbox[0][0] <= 1 && seg.bbox[0][1] <= 1}
+								<div
+									class="detection-box"
+									style={isRatio
+										? `left:${seg.bbox[0][0]*100}%;top:${seg.bbox[0][1]*100}%;width:${(seg.bbox[1][0]-seg.bbox[0][0])*100}%;height:${(seg.bbox[1][1]-seg.bbox[0][1])*100}%`
+										: ''}
+									title="{seg.text} — {(seg.confidence * 100).toFixed(1)}% confidence"
+								></div>
+							{/if}
+						{/each}
+					{/if}
+				</div>
+				{#if getSegments().length > 0}
+					<button
+						class="btn detection-toggle"
+						class:active={showDetections}
+						onclick={() => showDetections = !showDetections}
+					>
+						{showDetections ? 'hide' : 'show'} detections ({getSegments().length})
+					</button>
+				{/if}
 			</div>
 
 			<div class="info-panel">
@@ -155,9 +198,35 @@
 		background: var(--bg-card);
 	}
 
+	.image-wrap {
+		position: relative;
+	}
+
 	.detail-image {
 		width: 100%;
 		display: block;
+	}
+
+	.detection-box {
+		position: absolute;
+		border: 1.5px solid var(--accent);
+		background: var(--accent-dim);
+		cursor: help;
+		transition: background 0.1s ease;
+	}
+
+	.detection-box:hover {
+		background: rgba(170, 170, 255, 0.25);
+	}
+
+	.detection-toggle {
+		margin: 6px;
+	}
+
+	.detection-toggle.active {
+		background: var(--accent-dim);
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 
 	.info-panel {

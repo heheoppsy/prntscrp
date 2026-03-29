@@ -25,7 +25,7 @@ def _row_to_dict(row) -> dict:
         "downloaded_at": row["downloaded_at"],
     }
     # Include optional fields if present in the row
-    for col in ("state", "file_size_bytes"):
+    for col in ("state", "file_size_bytes", "ocr_segments"):
         try:
             d[col] = row[col]
         except (IndexError, KeyError):
@@ -195,7 +195,7 @@ def get_screenshot(screenshot_id: str):
     with database.get_db() as conn:
         row = conn.execute(
             """SELECT id, prnt_url, img_src, state, local_filename, image_format,
-                      file_size_bytes, ocr_text, discovered_at, downloaded_at
+                      file_size_bytes, ocr_text, ocr_segments, discovered_at, downloaded_at
                FROM screenshots WHERE id = ?""",
             (screenshot_id,),
         ).fetchone()

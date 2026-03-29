@@ -130,9 +130,10 @@ DEFAULT_SETTINGS = {
     "download_timeout": ("10", "Download request timeout (seconds)"),
     "min_image_size": ("1024", "Minimum image size in bytes"),
     "ocr_enabled": ("true", "Enable OCR text extraction"),
-    "ocr_gpu": ("false", "Use GPU for OCR (requires CUDA)"),
+    "ocr_engine": ("doctr", "OCR engine: doctr or easyocr"),
+    "ocr_gpu": ("false", "Use GPU for OCR"),
     "ocr_confidence_threshold": ("0.7", "Minimum OCR confidence (0.0-1.0)"),
-    "ocr_languages": ("en", "OCR languages (comma-separated)"),
+    "ocr_languages": ("en", "OCR languages, comma-separated (easyocr only)"),
     "proxy_api_url": (
         "https://api.proxyscrape.com/v4/free-proxy-list/get"
         "?request=display_proxies&protocol=socks5,socks4"
