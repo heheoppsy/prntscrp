@@ -38,7 +38,7 @@ PLACEHOLDER_HASHES = {
     "6e1844b0af2a8d02d18b1ef73bd63fc063c63f4a30f9430217f1d2e07347913d": "imageshack",
 }
 
-BLOCKED_HOSTS = ["imgur.com", "imageshack"]
+BLOCKED_HOSTS = ["imageshack"]
 
 PRNTSCR_PLACEHOLDER_URLS = [
     "//st.prntscr.com/2023/07/24/0635/img/0_173a7b_211be8ff.png",

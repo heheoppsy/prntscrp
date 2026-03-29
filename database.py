@@ -140,7 +140,7 @@ DEFAULT_SETTINGS = {
         "Proxy list API URL",
     ),
     "proxy_refresh_interval": ("3600", "Proxy refresh interval (seconds)"),
-    "blocked_hosts": ("imgur.com,imageshack", "Blocked image hosts (comma-separated)"),
+    "blocked_hosts": ("imageshack", "Blocked image hosts (comma-separated)"),
 }
 
 

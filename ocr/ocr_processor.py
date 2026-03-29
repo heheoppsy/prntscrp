@@ -4,7 +4,12 @@ import json
 import logging
 import threading
 import time
+import warnings
 from datetime import datetime, timezone
+
+# Suppress PyTorch MPS warnings
+warnings.filterwarnings("ignore", message=".*pin_memory.*MPS.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="torch")
 
 import config
 import database
