@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="36"
+   height="36"
+   viewBox="0 0 9.5249999 9.5249999"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <path
+     style="fill:#de87aa;stroke:none;stroke-width:0.1;stroke-linecap:square;stroke-linejoin:bevel;stroke-opacity:1;paint-order:stroke markers fill"
+     id="path1"
+     d="M 10.303485,4.4877404 2.3643858,4.5378479 6.2905413,-2.3626678 Z"
+     transform="matrix(0.45491754,0,0,0.45914891,4.2882444,5.7743118)" />
+  <g
+     id="layer1"
+     transform="translate(0.45793264,-0.11448317)"
+     style="fill:#aaaaff">
+    <text
+       xml:space="preserve"
+       style="font-weight:bold;font-size:9.80125px;font-family:'DM Sans';-inkscape-font-specification:'DM Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#aaaaff;stroke-width:0.367546"
+       x="-0.49388748"
+       y="-3.392812"
+       id="text1"
+       transform="scale(1.0958647,0.9125214)"><tspan
+         id="tspan1"
+         style="font-size:9.80125px;fill:#aaaaff;stroke-width:0.367546"
+         x="-0.49388748"
+         y="-3.392812" /><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.80125px;font-family:Silom;-inkscape-font-specification:Silom;fill:#aaaaff;stroke-width:0.367546"
+         x="-0.49388748"
+         y="8.8587513"
+         id="tspan2">P</tspan></text>
+  </g>
+</svg>

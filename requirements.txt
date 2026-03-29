@@ -1,0 +1,10 @@
+flask>=3.0
+flask-login>=0.6
+flask-cors>=4.0
+werkzeug>=3.0
+requests[socks]>=2.31
+beautifulsoup4>=4.12
+easyocr>=1.7
+Pillow>=10.0
+colorama>=0.4
+pysocks>=1.7
