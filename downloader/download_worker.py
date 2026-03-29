@@ -32,27 +32,28 @@ def run_downloader(worker_id: str, proxy_manager) -> None:
     consecutive_failures = 0
 
     while running.is_set():
+        use_proxy = database.get_setting_bool("downloader_use_proxy", False)
+
         ids = database.claim_work("discovered", "downloading", worker_id, limit=10)
         if not ids:
             time.sleep(2)
             continue
 
-        # Get a proxy for this batch
-        if current_proxy is None or consecutive_failures >= 3:
-            current_proxy = proxy_manager.get_random_proxy()
-            if current_proxy is None:
-                log.warning("[dl-%s] No proxies available, sleeping", worker_id)
-                # Release claimed work back to discovered so other workers can try
-                for sid in ids:
-                    database.transition(sid, "discovered")
-                time.sleep(5)
-                continue
-            consecutive_failures = 0
+        if use_proxy:
+            # Get a proxy for this batch
+            if current_proxy is None or consecutive_failures >= 3:
+                current_proxy = proxy_manager.get_random_proxy()
+                if current_proxy is None:
+                    log.warning("[dl-%s] No proxies available, sleeping", worker_id)
+                    for sid in ids:
+                        database.transition(sid, "discovered")
+                    time.sleep(5)
+                    continue
+                consecutive_failures = 0
 
         processed = 0
         for screenshot_id in ids:
             if not running.is_set():
-                # Release unprocessed items back
                 for sid in ids[processed:]:
                     try:
                         database.transition(sid, "discovered")
@@ -60,10 +61,10 @@ def run_downloader(worker_id: str, proxy_manager) -> None:
                         pass
                 break
             processed += 1
-            success = _download_one(screenshot_id, worker_id, current_proxy)
+            success = _download_one(screenshot_id, worker_id, current_proxy if use_proxy else None)
             if not success:
                 consecutive_failures += 1
-                if consecutive_failures >= 3:
+                if use_proxy and consecutive_failures >= 3:
                     log.info("[dl-%s] Rotating proxy after %d failures", worker_id, consecutive_failures)
                     current_proxy = proxy_manager.get_random_proxy()
                     consecutive_failures = 0
@@ -73,7 +74,7 @@ def run_downloader(worker_id: str, proxy_manager) -> None:
     log.info("[dl-%s] Shutting down", worker_id)
 
 
-def _download_one(screenshot_id: str, worker_id: str, proxy_string: str) -> bool:
+def _download_one(screenshot_id: str, worker_id: str, proxy_string: str | None) -> bool:
     """Download and validate a single screenshot. Returns True on success."""
     # Fetch the image URL from DB
     with database.get_db() as conn:
@@ -98,23 +99,39 @@ def _download_one(screenshot_id: str, worker_id: str, proxy_string: str) -> bool
         log.debug("[dl-%s] Placeholder URL: %s", worker_id, url)
         return True
 
-    # Download via proxy
-    proxies = {"http": proxy_string, "https": proxy_string}
+    # Download (optionally via proxy)
+    req_kwargs: dict = {
+        "headers": config.DOWNLOAD_HEADERS,
+        "timeout": config.DOWNLOAD_TIMEOUT,
+    }
+    if proxy_string:
+        req_kwargs["proxies"] = {"http": proxy_string, "https": proxy_string}
+
     try:
-        resp = requests.get(
-            url,
-            headers=config.DOWNLOAD_HEADERS,
-            timeout=config.DOWNLOAD_TIMEOUT,
-            proxies=proxies,
-        )
-        resp.raise_for_status()
+        resp = requests.get(url, **req_kwargs)
         data = resp.content
+        status = resp.status_code
         resp.close()
-    except Exception:
-        log.debug("[dl-%s] Download failed for %s via %s", worker_id, screenshot_id, proxy_string)
-        # Put back to discovered for retry, not permanently failed
+    except (requests.ConnectionError, requests.Timeout):
+        # Network error — retry later
+        via = f" via {proxy_string}" if proxy_string else ""
+        log.debug("[dl-%s] Network error for %s%s", worker_id, screenshot_id, via)
         database.transition(screenshot_id, "discovered")
-        return False  # Proxy failure
+        return False
+    except Exception:
+        via = f" via {proxy_string}" if proxy_string else ""
+        log.debug("[dl-%s] Download failed for %s%s", worker_id, screenshot_id, via)
+        database.transition(screenshot_id, "failed", filter_matched_pattern="download_error")
+        return True  # Not a proxy issue
+
+    if status == 404:
+        database.transition(screenshot_id, "skipped", filter_matched_pattern="404_not_found")
+        log.debug("[dl-%s] 404 for %s", worker_id, screenshot_id)
+        return True
+    elif status >= 400:
+        database.transition(screenshot_id, "failed", filter_matched_pattern=f"http_{status}")
+        log.debug("[dl-%s] HTTP %d for %s", worker_id, status, screenshot_id)
+        return True
 
     # Validate image
     valid, reason = validate_image_bytes(data)

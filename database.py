@@ -126,6 +126,7 @@ DEFAULT_SETTINGS = {
     "scraper_id_max_length": ("7", "Maximum random ID length"),
     "scraper_delay": ("0.2", "Delay between scraper requests (seconds)"),
     "downloader_threads": ("5", "Number of downloader worker threads"),
+    "downloader_use_proxy": ("false", "Route downloads through proxies (requires SOCKS5)"),
     "download_timeout": ("10", "Download request timeout (seconds)"),
     "min_image_size": ("1024", "Minimum image size in bytes"),
     "ocr_enabled": ("true", "Enable OCR text extraction"),
