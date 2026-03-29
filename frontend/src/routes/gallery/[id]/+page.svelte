@@ -49,6 +49,16 @@
 		}
 	}
 
+	async function unfilterScreenshot() {
+		if (!screenshot) return;
+		try {
+			await gallery.unfilter(screenshot.id);
+			screenshot = await gallery.get(screenshot.id);
+		} catch {
+			error = 'Failed to unfilter';
+		}
+	}
+
 	async function deleteScreenshot() {
 		if (!screenshot || !confirm('Delete this screenshot?')) return;
 		try {
@@ -155,6 +165,13 @@
 					</div>
 				{/if}
 
+				{#if screenshot.state === 'filtered' && screenshot.filter_matched_pattern}
+					<div class="filter-info">
+						<span class="filter-label">filtered by:</span>
+						<code class="filter-pattern">{screenshot.filter_matched_pattern}</code>
+					</div>
+				{/if}
+
 				{#if screenshot.state !== 'removed'}
 					<div class="actions">
 						<a
@@ -163,6 +180,9 @@
 							class="btn btn-primary">Open Full Size</a
 						>
 						{#if currentUser?.role === 'admin'}
+							{#if screenshot.state === 'filtered'}
+								<button class="btn" onclick={unfilterScreenshot}>Unfilter</button>
+							{/if}
 							<button class="btn btn-danger" onclick={deleteScreenshot}>Delete</button>
 						{/if}
 					</div>
@@ -217,6 +237,30 @@
 
 	.detection-box:hover {
 		background: rgba(170, 170, 255, 0.25);
+	}
+
+	.filter-info {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 10px;
+		border: 1px solid var(--danger);
+		border-radius: 3px;
+		background: #b0405010;
+	}
+
+	.filter-label {
+		font-family: "SF Mono", "Menlo", "Consolas", monospace;
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--danger);
+	}
+
+	.filter-pattern {
+		font-family: "SF Mono", "Menlo", "Consolas", monospace;
+		font-size: 12px;
+		color: var(--text);
 	}
 
 	.detection-toggle {

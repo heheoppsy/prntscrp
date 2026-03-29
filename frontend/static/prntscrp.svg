@@ -7,8 +7,30 @@
    viewBox="0 0 9.5249999 9.5249999"
    version="1.1"
    id="svg1"
+   sodipodi:docname="prntscrp.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="23.111111"
+     inkscape:cx="18"
+     inkscape:cy="17.978365"
+     inkscape:window-width="1920"
+     inkscape:window-height="1022"
+     inkscape:window-x="1920"
+     inkscape:window-y="30"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
   <defs
      id="defs1" />
   <path
@@ -20,20 +42,11 @@
      id="layer1"
      transform="translate(0.45793264,-0.11448317)"
      style="fill:#aaaaff">
-    <text
-       xml:space="preserve"
-       style="font-weight:bold;font-size:9.80125px;font-family:'DM Sans';-inkscape-font-specification:'DM Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#aaaaff;stroke-width:0.367546"
-       x="-0.49388748"
-       y="-3.392812"
+    <path
+       style="font-size:9.80125px;font-family:Silom;-inkscape-font-specification:Silom;stroke-width:0.367546"
+       d="M 0.3196163,8.8587513 V 1.5078135 H 3.593234 q 0.666485,0 1.1467463,0.4900625 0.4802612,0.4802612 0.4802612,1.1467463 v 0.8135038 q 0,0.666485 -0.4802612,1.1565475 Q 4.259719,5.5949349 3.593234,5.5949349 H 1.9564251 V 8.8587513 Z M 1.9564251,4.7716299 h 0.8135038 q 0.3430438,0 0.5782738,-0.2352301 Q 3.593234,4.2913686 3.593234,3.9581261 V 3.1446223 q 0,-0.3430438 -0.2450313,-0.5782738 Q 3.1129727,2.3213172 2.7699289,2.3213172 H 1.9564251 Z"
        id="text1"
-       transform="scale(1.0958647,0.9125214)"><tspan
-         id="tspan1"
-         style="font-size:9.80125px;fill:#aaaaff;stroke-width:0.367546"
-         x="-0.49388748"
-         y="-3.392812" /><tspan
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.80125px;font-family:Silom;-inkscape-font-specification:Silom;fill:#aaaaff;stroke-width:0.367546"
-         x="-0.49388748"
-         y="8.8587513"
-         id="tspan2">P</tspan></text>
+       transform="scale(1.0958647,0.9125214)"
+       aria-label="P" />
   </g>
 </svg>

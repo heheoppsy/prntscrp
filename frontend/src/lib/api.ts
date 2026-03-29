@@ -12,6 +12,7 @@ export interface Screenshot {
 	file_size_bytes?: number | null;
 	ocr_text: string | null;
 	ocr_segments?: string | null;
+	filter_matched_pattern?: string | null;
 	discovered_at: string;
 	downloaded_at: string | null;
 }
@@ -126,7 +127,10 @@ export const gallery = {
 		),
 
 	delete: (id: string) =>
-		request<{ message: string }>(`/gallery/${id}`, { method: 'DELETE' })
+		request<{ message: string }>(`/gallery/${id}`, { method: 'DELETE' }),
+
+	unfilter: (id: string) =>
+		request<{ message: string }>(`/gallery/${id}/unfilter`, { method: 'POST' })
 };
 
 // Search

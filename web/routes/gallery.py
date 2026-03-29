@@ -25,7 +25,7 @@ def _row_to_dict(row) -> dict:
         "downloaded_at": row["downloaded_at"],
     }
     # Include optional fields if present in the row
-    for col in ("state", "file_size_bytes", "ocr_segments"):
+    for col in ("state", "file_size_bytes", "ocr_segments", "filter_matched_pattern"):
         try:
             d[col] = row[col]
         except (IndexError, KeyError):
@@ -195,7 +195,8 @@ def get_screenshot(screenshot_id: str):
     with database.get_db() as conn:
         row = conn.execute(
             """SELECT id, prnt_url, img_src, state, local_filename, image_format,
-                      file_size_bytes, ocr_text, ocr_segments, discovered_at, downloaded_at
+                      file_size_bytes, ocr_text, ocr_segments, filter_matched_pattern,
+                      discovered_at, downloaded_at
                FROM screenshots WHERE id = ?""",
             (screenshot_id,),
         ).fetchone()
@@ -235,3 +236,27 @@ def delete_screenshot(screenshot_id: str):
         )
 
     return jsonify({"message": "Removed"}), 200
+
+
+@gallery_bp.route("/<screenshot_id>/unfilter", methods=["POST"])
+@admin_required
+def unfilter_screenshot(screenshot_id: str):
+    with database.get_db() as conn:
+        row = conn.execute(
+            "SELECT state FROM screenshots WHERE id = ?", (screenshot_id,)
+        ).fetchone()
+
+        if not row:
+            return jsonify({"error": "Screenshot not found"}), 404
+        if row["state"] != "filtered":
+            return jsonify({"error": "Screenshot is not filtered"}), 400
+
+        conn.execute(
+            """UPDATE screenshots
+               SET state = 'ocr_complete', filter_matched_pattern = NULL,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')
+               WHERE id = ?""",
+            (screenshot_id,),
+        )
+
+    return jsonify({"message": "Unfiltered"}), 200

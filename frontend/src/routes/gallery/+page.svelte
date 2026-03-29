@@ -14,6 +14,7 @@
 	let query = $state('');
 	let activeQuery = $state('');
 	let searchMode = $state<'text' | 'regex'>('text');
+	let showingFiltered = $state(false);
 
 	// Advanced filters
 	let showAdvanced = $state(false);
@@ -40,7 +41,11 @@
 	let appliedFilters = $state<Record<string, string>>({});
 
 	function buildParams(): Record<string, string> {
-		return { ...appliedFilters, sort: sortBy, dir: sortDir };
+		const p: Record<string, string> = { ...appliedFilters, sort: sortBy, dir: sortDir };
+		if (showingFiltered) {
+			p.state = 'filtered';
+		}
+		return p;
 	}
 
 	function applyFilters() {
@@ -56,7 +61,7 @@
 		if (minIdLen) f.min_id_len = minIdLen;
 		if (maxIdLen) f.max_id_len = maxIdLen;
 		appliedFilters = f;
-		loadPage(1, false);
+		loadPage(1);
 	}
 
 	function clearFilters() {
@@ -73,17 +78,40 @@
 		appliedFilters = {};
 		sortBy = 'discovered_at';
 		sortDir = 'asc';
-		loadPage(1, false);
+		loadPage(1);
 	}
 
 	function readUrlParams() {
 		const params = pageStore.url.searchParams;
 		page = parseInt(params.get('p') || '1') || 1;
-		const q = params.get('q') || '';
-		const m = params.get('mode');
-		query = q;
-		activeQuery = q;
-		if (m === 'regex') searchMode = 'regex';
+		query = params.get('q') || '';
+		activeQuery = query;
+		searchMode = params.get('mode') === 'regex' ? 'regex' : 'text';
+		sortBy = params.get('sort') || 'discovered_at';
+		sortDir = (params.get('dir') || 'asc') as 'asc' | 'desc';
+		showingFiltered = params.get('view') === 'filtered';
+
+		// Restore applied filters
+		const filterKeys = ['min_size', 'max_size', 'has_ocr', 'date_from', 'date_to', 'format', 'id_from', 'id_to', 'min_id_len', 'max_id_len'];
+		const restored: Record<string, string> = {};
+		for (const k of filterKeys) {
+			const v = params.get(k);
+			if (v) restored[k] = v;
+		}
+		appliedFilters = restored;
+
+		// Restore form inputs from applied filters
+		minSize = restored.min_size ? String(parseInt(restored.min_size) / 1024) : '';
+		maxSize = restored.max_size ? String(parseInt(restored.max_size) / 1024) : '';
+		hasOcr = restored.has_ocr || '';
+		dateFrom = restored.date_from || '';
+		dateTo = restored.date_to || '';
+		formatFilter = restored.format || '';
+		idFrom = restored.id_from || '';
+		idTo = restored.id_to || '';
+		minIdLen = restored.min_id_len || '';
+		maxIdLen = restored.max_id_len || '';
+		if (Object.keys(restored).length > 0) showAdvanced = true;
 	}
 
 	function pushUrl() {
@@ -91,6 +119,15 @@
 		if (page > 1) params.set('p', String(page));
 		if (activeQuery) params.set('q', activeQuery);
 		if (activeQuery && searchMode === 'regex') params.set('mode', 'regex');
+		if (sortBy !== 'discovered_at') params.set('sort', sortBy);
+		if (sortDir !== 'asc') params.set('dir', sortDir);
+		if (showingFiltered) params.set('view', 'filtered');
+
+		// Persist applied filters
+		for (const [k, v] of Object.entries(appliedFilters)) {
+			if (v) params.set(k, v);
+		}
+
 		const qs = params.toString();
 		const url = qs ? `/gallery?${qs}` : '/gallery';
 		goto(url, { replaceState: false, keepFocus: true, noScroll: true });
@@ -153,16 +190,8 @@
 			return;
 		}
 
-		const params = pageStore.url.searchParams;
-		const urlPage = parseInt(params.get('p') || '1') || 1;
-		const urlQuery = params.get('q') || '';
-		const urlMode = params.get('mode') === 'regex' ? 'regex' as const : 'text' as const;
-
-		page = urlPage;
-		query = urlQuery;
-		activeQuery = urlQuery;
-		searchMode = urlMode;
-		loadPage(urlPage, false);
+		readUrlParams();
+		loadPage(page, false);
 	});
 
 	let lightboxIndex = $state(0);
@@ -258,8 +287,13 @@
 
 <div class="container gallery-page">
 	<div class="page-header">
-		<h1 class="page-title">{activeQuery ? 'search' : 'gallery'}</h1>
+		<h1 class="page-title">{activeQuery ? 'search' : showingFiltered ? 'filtered' : 'gallery'}</h1>
 		<span class="page-count">{total.toLocaleString()}</span>
+		<button
+			class="btn view-toggle"
+			class:active={showingFiltered}
+			onclick={() => { showingFiltered = !showingFiltered; loadPage(1); }}
+		>{showingFiltered ? 'show gallery' : 'show filtered'}</button>
 	</div>
 
 	<div class="controls-row">
@@ -281,13 +315,13 @@
 		</form>
 
 		<div class="sort-controls">
-			<select class="input sort-select" value={sortBy} onchange={(e) => { sortBy = (e.target as HTMLSelectElement).value; loadPage(1, false); }}>
+			<select class="input sort-select" value={sortBy} onchange={(e) => { sortBy = (e.target as HTMLSelectElement).value; loadPage(1); }}>
 				<option value="discovered_at">discovered</option>
 				<option value="downloaded_at">downloaded</option>
 				<option value="file_size_bytes">size</option>
 				<option value="id">ID</option>
 			</select>
-			<button class="btn sort-dir" onclick={() => { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; loadPage(1, false); }}>
+			<button class="btn sort-dir" onclick={() => { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; loadPage(1); }}>
 				{sortDir === 'asc' ? '↑' : '↓'}
 			</button>
 			<button
@@ -465,6 +499,16 @@
 		color: var(--text-dimmer);
 		font-family: "SF Mono", "Menlo", "Consolas", monospace;
 		font-size: 11px;
+	}
+
+	.view-toggle {
+		margin-left: auto;
+	}
+
+	.view-toggle.active {
+		background: var(--accent-dim);
+		border-color: var(--accent);
+		color: var(--accent);
 	}
 
 	.controls-row {

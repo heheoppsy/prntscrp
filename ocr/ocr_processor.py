@@ -214,10 +214,6 @@ def _process_one(screenshot_id: str, worker_id: str) -> None:
             ocr_segments=json.dumps(segments),
             ocr_processed_at=now,
         )
-        try:
-            filepath.unlink()
-        except OSError:
-            log.warning("[ocr-%s] Failed to delete %s", worker_id, filepath)
         log.info("[ocr-%s] Filtered %s (pattern: %s)", worker_id, screenshot_id, matched)
 
         with database.get_db() as conn:
