@@ -33,6 +33,14 @@ def _row_to_dict(row) -> dict:
     return d
 
 
+VALID_SORT_COLUMNS = {
+    "discovered_at", "downloaded_at", "file_size_bytes", "id", "ocr_processed_at",
+}
+
+# Base36 numeric sort: shorter IDs are smaller numbers, then alphabetical within same length
+ID_SORT_EXPR = "LENGTH(id), id"
+
+
 @gallery_bp.route("", methods=["GET"])
 @login_required
 def list_screenshots():
@@ -40,13 +48,70 @@ def list_screenshots():
     per_page = min(100, max(1, request.args.get("per_page", 20, type=int)))
     state_param = request.args.get("state", "ocr_complete,downloaded,removed")
 
+    # Sorting
+    sort_by = request.args.get("sort", "discovered_at")
+    sort_dir = request.args.get("dir", "asc").lower()
+    if sort_by not in VALID_SORT_COLUMNS:
+        sort_by = "discovered_at"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+
+    # Filters
+    min_size = request.args.get("min_size", None, type=int)
+    max_size = request.args.get("max_size", None, type=int)
+    has_ocr = request.args.get("has_ocr", None)  # "true" or "false"
+    date_from = request.args.get("date_from", None)
+    date_to = request.args.get("date_to", None)
+    format_filter = request.args.get("format", None)
+    id_from = request.args.get("id_from", None)
+    id_to = request.args.get("id_to", None)
+    min_id_len = request.args.get("min_id_len", None, type=int)
+    max_id_len = request.args.get("max_id_len", None, type=int)
+
     states = [s.strip() for s in state_param.split(",") if s.strip()]
     placeholders = ",".join("?" for _ in states)
 
+    where = [f"state IN ({placeholders})"]
+    params: list = list(states)
+
+    if min_size is not None:
+        where.append("file_size_bytes >= ?")
+        params.append(min_size)
+    if max_size is not None:
+        where.append("file_size_bytes <= ?")
+        params.append(max_size)
+    if has_ocr == "true":
+        where.append("ocr_text IS NOT NULL AND ocr_text != ''")
+    elif has_ocr == "false":
+        where.append("(ocr_text IS NULL OR ocr_text = '')")
+    if date_from:
+        where.append("downloaded_at >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("downloaded_at <= ?")
+        params.append(date_to)
+    if format_filter:
+        where.append("image_format = ?")
+        params.append(format_filter)
+    if id_from:
+        where.append("(LENGTH(id) > ? OR (LENGTH(id) = ? AND id >= ?))")
+        params.extend([len(id_from), len(id_from), id_from])
+    if id_to:
+        where.append("(LENGTH(id) < ? OR (LENGTH(id) = ? AND id <= ?))")
+        params.extend([len(id_to), len(id_to), id_to])
+    if min_id_len is not None:
+        where.append("LENGTH(id) >= ?")
+        params.append(min_id_len)
+    if max_id_len is not None:
+        where.append("LENGTH(id) <= ?")
+        params.append(max_id_len)
+
+    where_clause = " AND ".join(where)
+
     with database.get_db() as conn:
         total = conn.execute(
-            f"SELECT COUNT(*) FROM screenshots WHERE state IN ({placeholders})",
-            states,
+            f"SELECT COUNT(*) FROM screenshots WHERE {where_clause}",
+            params,
         ).fetchone()[0]
 
         pages = max(1, math.ceil(total / per_page))
@@ -56,10 +121,10 @@ def list_screenshots():
             f"""SELECT id, prnt_url, img_src, state, local_filename, image_format,
                        file_size_bytes, ocr_text, discovered_at, downloaded_at
                 FROM screenshots
-                WHERE state IN ({placeholders})
-                ORDER BY discovered_at ASC
+                WHERE {where_clause}
+                ORDER BY {f"LENGTH(id) {sort_dir}, id {sort_dir}" if sort_by == "id" else f"{sort_by} {sort_dir}"}
                 LIMIT ? OFFSET ?""",
-            states + [per_page, offset],
+            params + [per_page, offset],
         ).fetchall()
 
     return jsonify({

@@ -105,8 +105,15 @@ export const publicStats = () =>
 
 // Gallery
 export const gallery = {
-	list: (page = 1, perPage = 24) =>
-		request<PaginatedResponse<Screenshot>>(`/gallery?page=${page}&per_page=${perPage}`),
+	list: (page = 1, perPage = 24, filters?: Record<string, string>) => {
+		const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+		if (filters) {
+			for (const [k, v] of Object.entries(filters)) {
+				if (v) params.set(k, v);
+			}
+		}
+		return request<PaginatedResponse<Screenshot>>(`/gallery?${params}`);
+	},
 
 	get: (id: string) => request<Screenshot>(`/gallery/${id}`),
 

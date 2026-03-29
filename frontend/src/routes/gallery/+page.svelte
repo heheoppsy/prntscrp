@@ -15,10 +15,66 @@
 	let activeQuery = $state('');
 	let searchMode = $state<'text' | 'regex'>('text');
 
+	// Advanced filters
+	let showAdvanced = $state(false);
+	let sortBy = $state('discovered_at');
+	let sortDir = $state<'asc' | 'desc'>('asc');
+	let minSize = $state('');
+	let maxSize = $state('');
+	let hasOcr = $state('');  // '', 'true', 'false'
+	let dateFrom = $state('');
+	let dateTo = $state('');
+	let formatFilter = $state('');
+
 	// Lightbox
 	let lightbox = $state<Screenshot | null>(null);
 
 	const perPage = 48;
+
+	let idFrom = $state('');
+	let idTo = $state('');
+	let minIdLen = $state('');
+	let maxIdLen = $state('');
+
+	// Applied filter snapshot — only updates when user clicks "apply"
+	let appliedFilters = $state<Record<string, string>>({});
+
+	function buildParams(): Record<string, string> {
+		return { ...appliedFilters, sort: sortBy, dir: sortDir };
+	}
+
+	function applyFilters() {
+		const f: Record<string, string> = {};
+		if (minSize) f.min_size = String(parseInt(minSize) * 1024);
+		if (maxSize) f.max_size = String(parseInt(maxSize) * 1024);
+		if (hasOcr) f.has_ocr = hasOcr;
+		if (dateFrom) f.date_from = dateFrom;
+		if (dateTo) f.date_to = dateTo;
+		if (formatFilter) f.format = formatFilter;
+		if (idFrom) f.id_from = idFrom;
+		if (idTo) f.id_to = idTo;
+		if (minIdLen) f.min_id_len = minIdLen;
+		if (maxIdLen) f.max_id_len = maxIdLen;
+		appliedFilters = f;
+		loadPage(1, false);
+	}
+
+	function clearFilters() {
+		minSize = '';
+		maxSize = '';
+		hasOcr = '';
+		dateFrom = '';
+		dateTo = '';
+		formatFilter = '';
+		idFrom = '';
+		idTo = '';
+		minIdLen = '';
+		maxIdLen = '';
+		appliedFilters = {};
+		sortBy = 'discovered_at';
+		sortDir = 'asc';
+		loadPage(1, false);
+	}
 
 	function readUrlParams() {
 		const params = pageStore.url.searchParams;
@@ -40,6 +96,8 @@
 		goto(url, { replaceState: false, keepFocus: true, noScroll: true });
 	}
 
+	let suppressEffect = false;
+
 	async function loadPage(p: number, updateUrl = true) {
 		loading = true;
 		error = '';
@@ -48,13 +106,16 @@
 			if (activeQuery) {
 				result = await searchApi(activeQuery, p, perPage, searchMode);
 			} else {
-				result = await gallery.list(p, perPage);
+				result = await gallery.list(p, perPage, buildParams());
 			}
 			items = result.items;
 			total = result.total;
 			pages = result.pages;
 			page = p;
-			if (updateUrl) pushUrl();
+			if (updateUrl) {
+				suppressEffect = true;
+				pushUrl();
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load';
 		} finally {
@@ -80,25 +141,28 @@
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	// React to browser back/forward — only triggers on actual URL changes
+	// React to browser back/forward only
 	let lastUrl = $state('');
 	$effect(() => {
 		const url = pageStore.url.toString();
 		if (url === lastUrl) return;
 		lastUrl = url;
 
+		if (suppressEffect) {
+			suppressEffect = false;
+			return;
+		}
+
 		const params = pageStore.url.searchParams;
 		const urlPage = parseInt(params.get('p') || '1') || 1;
 		const urlQuery = params.get('q') || '';
 		const urlMode = params.get('mode') === 'regex' ? 'regex' as const : 'text' as const;
 
-		if (urlPage !== page || urlQuery !== activeQuery) {
-			page = urlPage;
-			query = urlQuery;
-			activeQuery = urlQuery;
-			searchMode = urlMode;
-			loadPage(urlPage, false);
-		}
+		page = urlPage;
+		query = urlQuery;
+		activeQuery = urlQuery;
+		searchMode = urlMode;
+		loadPage(urlPage, false);
 	});
 
 	let lightboxIndex = $state(0);
@@ -151,27 +215,9 @@
 		if (e.key === 'ArrowRight') lightboxNext();
 	}
 
-	async function silentRefresh() {
-		if (loading) return;
-		try {
-			let result;
-			if (activeQuery) {
-				result = await searchApi(activeQuery, page, perPage, searchMode);
-			} else {
-				result = await gallery.list(page, perPage);
-			}
-			items = result.items;
-			total = result.total;
-			pages = result.pages;
-		} catch { /* ignore */ }
-	}
-
 	onMount(() => {
 		readUrlParams();
 		loadPage(page, false);
-
-		const interval = setInterval(silentRefresh, 5000);
-		return () => clearInterval(interval);
 	});
 </script>
 
@@ -216,25 +262,98 @@
 		<span class="page-count">{total.toLocaleString()}</span>
 	</div>
 
-	<form class="search-bar" onsubmit={(e) => { e.preventDefault(); doSearch(); }}>
-		<input
-			class="input search-input"
-			type="text"
-			bind:value={query}
-			placeholder={searchMode === 'regex' ? 'regex pattern...' : 'search ocr text...'}
-		/>
-		{#if activeQuery}
-			<button class="btn" type="button" onclick={clearSearch}>clear</button>
-		{/if}
-		<select
-			class="input search-mode-select"
-			bind:value={searchMode}
-		>
-			<option value="text">text</option>
-			<option value="regex">regex</option>
-		</select>
-		<button class="btn btn-primary" type="submit" disabled={loading}>search</button>
-	</form>
+	<div class="controls-row">
+		<form class="search-bar" onsubmit={(e) => { e.preventDefault(); doSearch(); }}>
+			<input
+				class="input search-input"
+				type="text"
+				bind:value={query}
+				placeholder={searchMode === 'regex' ? 'regex pattern...' : 'search ocr text...'}
+			/>
+			{#if activeQuery}
+				<button class="btn" type="button" onclick={clearSearch}>clear</button>
+			{/if}
+			<select class="input search-mode-select" bind:value={searchMode}>
+				<option value="text">text</option>
+				<option value="regex">regex</option>
+			</select>
+			<button class="btn btn-primary" type="submit" disabled={loading}>search</button>
+		</form>
+
+		<div class="sort-controls">
+			<select class="input sort-select" value={sortBy} onchange={(e) => { sortBy = (e.target as HTMLSelectElement).value; loadPage(1, false); }}>
+				<option value="discovered_at">discovered</option>
+				<option value="downloaded_at">downloaded</option>
+				<option value="file_size_bytes">size</option>
+				<option value="id">ID</option>
+			</select>
+			<button class="btn sort-dir" onclick={() => { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; loadPage(1, false); }}>
+				{sortDir === 'asc' ? '↑' : '↓'}
+			</button>
+			<button
+				class="btn"
+				class:active-filter={showAdvanced}
+				onclick={() => showAdvanced = !showAdvanced}
+			>filters</button>
+		</div>
+	</div>
+
+	{#if showAdvanced}
+		<div class="advanced-filters">
+			<div class="filter-group">
+				<span class="filter-label">size (KB)</span>
+				<input class="input filter-input" type="number" placeholder="min" bind:value={minSize} />
+				<span class="filter-sep">–</span>
+				<input class="input filter-input" type="number" placeholder="max" bind:value={maxSize} />
+			</div>
+
+			<div class="filter-group">
+				<span class="filter-label">id range</span>
+				<input class="input filter-input" type="text" placeholder="from" bind:value={idFrom} />
+				<span class="filter-sep">–</span>
+				<input class="input filter-input" type="text" placeholder="to" bind:value={idTo} />
+			</div>
+
+			<div class="filter-group">
+				<span class="filter-label">id length</span>
+				<input class="input filter-input-sm" type="number" placeholder="min" bind:value={minIdLen} />
+				<span class="filter-sep">–</span>
+				<input class="input filter-input-sm" type="number" placeholder="max" bind:value={maxIdLen} />
+			</div>
+
+			<div class="filter-group">
+				<span class="filter-label">ocr text</span>
+				<select class="input filter-select" bind:value={hasOcr}>
+					<option value="">any</option>
+					<option value="true">has text</option>
+					<option value="false">no text</option>
+				</select>
+			</div>
+
+			<div class="filter-group">
+				<span class="filter-label">format</span>
+				<select class="input filter-select" bind:value={formatFilter}>
+					<option value="">any</option>
+					<option value="png">png</option>
+					<option value="jpg">jpg</option>
+					<option value="gif">gif</option>
+					<option value="webp">webp</option>
+				</select>
+			</div>
+
+			<div class="filter-group">
+				<span class="filter-label">date</span>
+				<input class="input filter-input" type="date" bind:value={dateFrom} />
+				<span class="filter-sep">–</span>
+				<input class="input filter-input" type="date" bind:value={dateTo} />
+			</div>
+
+			<div class="filter-actions">
+				<button class="btn btn-primary" onclick={applyFilters}>apply</button>
+				<button class="btn" onclick={clearFilters}>clear all</button>
+			</div>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="error-msg">{error}</div>
@@ -348,10 +467,17 @@
 		font-size: 11px;
 	}
 
+	.controls-row {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 12px;
+		align-items: flex-start;
+	}
+
 	.search-bar {
+		flex: 1;
 		display: flex;
 		gap: 6px;
-		margin-bottom: 16px;
 	}
 
 	.search-input {
@@ -362,6 +488,85 @@
 		width: 80px;
 		flex-shrink: 0;
 		text-align: center;
+	}
+
+	.sort-controls {
+		display: flex;
+		gap: 4px;
+		flex-shrink: 0;
+		margin-left: 0;
+		padding-left: 8px;
+		border-left: 1px solid var(--border);
+	}
+
+	.sort-select {
+		width: 110px;
+		text-align: center;
+	}
+
+	.sort-dir {
+		width: 28px;
+		padding: 0;
+		justify-content: center;
+		font-size: 14px;
+	}
+
+	.active-filter {
+		background: var(--accent-dim);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	/* Advanced filters */
+	.advanced-filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		padding: 10px 12px;
+		margin-bottom: 12px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--bg-card);
+		align-items: center;
+	}
+
+	.filter-group {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.filter-label {
+		font-family: "SF Mono", "Menlo", "Consolas", monospace;
+		font-size: 10px;
+		color: var(--text-dim);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		margin-right: 4px;
+		white-space: nowrap;
+	}
+
+	.filter-input {
+		width: 90px;
+	}
+
+	.filter-input-sm {
+		width: 55px;
+	}
+
+	.filter-select {
+		width: 90px;
+	}
+
+	.filter-sep {
+		color: var(--text-dimmer);
+		font-size: 12px;
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: 6px;
+		margin-left: auto;
 	}
 
 	.error-msg {
