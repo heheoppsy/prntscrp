@@ -50,7 +50,14 @@ def run_ocr_processor(worker_id: str) -> None:
             continue
 
         screenshot_id = ids[0]
-        _process_one(screenshot_id, worker_id)
+        try:
+            _process_one(screenshot_id, worker_id)
+        except Exception:
+            log.exception("[ocr-%s] Unhandled error processing %s, returning to downloaded", worker_id, screenshot_id)
+            try:
+                database.transition(screenshot_id, "downloaded")
+            except Exception:
+                log.exception("[ocr-%s] Failed to recover state for %s", worker_id, screenshot_id)
 
     log.info("[ocr-%s] Shutting down", worker_id)
 

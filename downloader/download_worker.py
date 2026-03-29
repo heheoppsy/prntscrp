@@ -49,9 +49,17 @@ def run_downloader(worker_id: str, proxy_manager) -> None:
                 continue
             consecutive_failures = 0
 
+        processed = 0
         for screenshot_id in ids:
             if not running.is_set():
+                # Release unprocessed items back
+                for sid in ids[processed:]:
+                    try:
+                        database.transition(sid, "discovered")
+                    except Exception:
+                        pass
                 break
+            processed += 1
             success = _download_one(screenshot_id, worker_id, current_proxy)
             if not success:
                 consecutive_failures += 1
@@ -100,13 +108,13 @@ def _download_one(screenshot_id: str, worker_id: str, proxy_string: str) -> bool
             proxies=proxies,
         )
         resp.raise_for_status()
+        data = resp.content
+        resp.close()
     except Exception:
         log.debug("[dl-%s] Download failed for %s via %s", worker_id, screenshot_id, proxy_string)
         # Put back to discovered for retry, not permanently failed
         database.transition(screenshot_id, "discovered")
         return False  # Proxy failure
-
-    data = resp.content
 
     # Validate image
     valid, reason = validate_image_bytes(data)

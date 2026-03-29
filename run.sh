@@ -2,6 +2,13 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
+# Load .env if present
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 PYTHON="${PYTHON:-python3}"
 PIDS=()
 

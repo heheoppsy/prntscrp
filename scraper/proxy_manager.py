@@ -2,6 +2,7 @@
 
 import logging
 import random
+import threading
 import time
 
 import requests
@@ -15,66 +16,92 @@ log = logging.getLogger(__name__)
 class ProxyManager:
     """Manages a pool of proxies stored in the database."""
 
-    def __init__(self):
-        self._last_refresh: float = 0
+    _refresh_lock = threading.Lock()
+    _last_refresh: float = 0
 
     def refresh_proxies(self) -> int:
         """Fetch proxies from the API and upsert into the database.
 
         Returns the number of proxies upserted.
         """
-        log.info("Refreshing proxies from %s", config.PROXY_API_URL)
+        # Prevent stampede — only one thread refreshes at a time
+        if not ProxyManager._refresh_lock.acquire(blocking=False):
+            log.debug("Proxy refresh already in progress, skipping")
+            return 0
+
         try:
-            resp = requests.get(config.PROXY_API_URL, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            log.exception("Failed to fetch proxy list")
-            return 0
+            # Don't refresh if we just did recently (within 60s)
+            if time.time() - ProxyManager._last_refresh < 60:
+                log.debug("Proxy refresh too recent, skipping")
+                return 0
 
-        proxies = data.get("proxies", [])
-        if not proxies:
-            log.warning("No proxies returned from API")
-            return 0
+            log.info("Refreshing proxies from %s", config.PROXY_API_URL)
+            try:
+                resp = requests.get(config.PROXY_API_URL, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                resp.close()
+            except Exception:
+                log.exception("Failed to fetch proxy list")
+                return 0
 
-        count = 0
-        with database.get_db() as conn:
-            for p in proxies:
-                ip = p.get("ip")
-                port = p.get("port")
-                protocol = p.get("protocol", "socks5")
-                ssl_support = 1 if p.get("ssl") else 0
+            proxies = data.get("proxies", [])
+            if not proxies:
+                log.warning("No proxies returned from API")
+                return 0
 
-                if not ip or not port:
-                    continue
+            count = 0
+            with database.get_db() as conn:
+                for p in proxies:
+                    ip = p.get("ip")
+                    port = p.get("port")
+                    protocol = p.get("protocol", "socks5")
+                    ssl_support = 1 if p.get("ssl") else 0
 
-                proxy_string = f"{protocol}://{ip}:{port}"
+                    if not ip or not port:
+                        continue
 
-                conn.execute(
-                    """
-                    INSERT INTO proxies (protocol, ip, port, proxy_string, is_alive, ssl_support, source)
-                    VALUES (?, ?, ?, ?, 1, ?, 'proxyscrape')
-                    ON CONFLICT(ip, port) DO UPDATE SET
-                        protocol = excluded.protocol,
-                        proxy_string = excluded.proxy_string,
-                        is_alive = 1,
-                        ssl_support = excluded.ssl_support,
-                        fetched_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')
-                    """,
-                    (protocol, ip, int(port), proxy_string, ssl_support),
-                )
-                count += 1
+                    proxy_string = f"{protocol}://{ip}:{port}"
 
-        self._last_refresh = time.time()
-        log.info("Upserted %d proxies", count)
-        return count
+                    conn.execute(
+                        """
+                        INSERT INTO proxies (protocol, ip, port, proxy_string, is_alive, ssl_support, source)
+                        VALUES (?, ?, ?, ?, 1, ?, 'proxyscrape')
+                        ON CONFLICT(ip, port) DO UPDATE SET
+                            protocol = excluded.protocol,
+                            proxy_string = excluded.proxy_string,
+                            is_alive = 1,
+                            ssl_support = excluded.ssl_support,
+                            fetched_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')
+                        """,
+                        (protocol, ip, int(port), proxy_string, ssl_support),
+                    )
+                    count += 1
+
+            ProxyManager._last_refresh = time.time()
+            log.info("Upserted %d proxies", count)
+            return count
+        finally:
+            ProxyManager._refresh_lock.release()
 
     def get_random_proxy(self) -> str | None:
-        """Return a random alive proxy string, or None if none available."""
+        """Return a random alive proxy string. Auto-refreshes if none available."""
         with database.get_db() as conn:
             rows = conn.execute(
                 "SELECT proxy_string FROM proxies WHERE is_alive = 1"
             ).fetchall()
+
+        if not rows:
+            log.warning("No alive proxies — attempting auto-refresh")
+            # Reset dead proxies and fetch new ones
+            with database.get_db() as conn:
+                conn.execute("UPDATE proxies SET is_alive = 1, failure_count = 0 WHERE is_alive = 0")
+            self.refresh_proxies()
+
+            with database.get_db() as conn:
+                rows = conn.execute(
+                    "SELECT proxy_string FROM proxies WHERE is_alive = 1"
+                ).fetchall()
 
         if not rows:
             return None
@@ -109,4 +136,4 @@ class ProxyManager:
 
     @property
     def should_refresh(self) -> bool:
-        return time.time() - self._last_refresh > config.PROXY_REFRESH_INTERVAL
+        return time.time() - ProxyManager._last_refresh > config.PROXY_REFRESH_INTERVAL

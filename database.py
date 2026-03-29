@@ -1,14 +1,10 @@
 """SQLite database management with WAL mode for concurrent access."""
 
 import sqlite3
-import threading
 from contextlib import contextmanager
 from pathlib import Path
 
 from config import DB_PATH
-
-# Thread-local connections
-_local = threading.local()
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -147,29 +143,28 @@ DEFAULT_SETTINGS = {
 }
 
 
-def get_connection() -> sqlite3.Connection:
-    """Get a thread-local database connection."""
-    conn = getattr(_local, "connection", None)
-    if conn is None:
-        conn = sqlite3.connect(str(DB_PATH), timeout=10)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute("PRAGMA foreign_keys=ON")
-        _local.connection = conn
+def _open_connection() -> sqlite3.Connection:
+    """Open a new database connection."""
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 @contextmanager
 def get_db():
-    """Context manager for database operations with auto-commit."""
-    conn = get_connection()
+    """Context manager for database operations with auto-commit. Opens and closes per use."""
+    conn = _open_connection()
     try:
         yield conn
         conn.commit()
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -234,9 +229,31 @@ def get_all_settings() -> dict:
     return {r["key"]: {"value": r["value"], "description": r["description"]} for r in rows}
 
 
+# Valid columns that transition() is allowed to update
+_TRANSITION_COLUMNS = frozenset({
+    "local_filename", "file_size_bytes", "image_hash", "image_format",
+    "ocr_text", "ocr_segments", "ocr_confidence", "filter_matched_pattern",
+    "downloaded_at", "ocr_processed_at", "img_src",
+})
+
+# Claims older than this are considered abandoned and can be reclaimed
+CLAIM_TIMEOUT_SECONDS = 300  # 5 minutes
+
+
 def claim_work(state: str, new_state: str, worker_id: str, limit: int = 1) -> list[str]:
-    """Atomically claim rows for processing. Returns list of claimed IDs."""
+    """Atomically claim rows for processing. Also reclaims stale claims."""
     with get_db() as conn:
+        # First, recover any abandoned claims (older than timeout)
+        conn.execute(
+            """
+            UPDATE screenshots
+            SET state = ?, claimed_by = NULL, claimed_at = NULL
+            WHERE state = ? AND claimed_by IS NOT NULL
+              AND claimed_at < strftime('%Y-%m-%dT%H:%M:%f', 'now', ?)
+            """,
+            (state, new_state, f"-{CLAIM_TIMEOUT_SECONDS} seconds"),
+        )
+
         cursor = conn.execute(
             """
             UPDATE screenshots
@@ -260,9 +277,11 @@ def transition(screenshot_id: str, to_state: str, **kwargs):
     """Transition a screenshot to a new state with optional column updates."""
     sets = ["state = ?", "claimed_by = NULL", "claimed_at = NULL",
             "updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')"]
-    params = [to_state]
+    params: list = [to_state]
 
     for col, val in kwargs.items():
+        if col not in _TRANSITION_COLUMNS:
+            raise ValueError(f"Invalid column in transition: {col}")
         sets.append(f"{col} = ?")
         params.append(val)
 

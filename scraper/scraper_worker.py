@@ -59,6 +59,8 @@ def run_scraper(worker_id: int, proxy_manager) -> None:
                 headers={"User-Agent": config.DOWNLOAD_HEADERS["User-Agent"]},
             )
             resp.raise_for_status()
+            html = resp.text
+            resp.close()
         except Exception:
             log.debug("[scraper-%d] Fetch failed for %s via %s", worker_id, url, current_proxy)
             proxy_manager.mark_failure(current_proxy)
@@ -72,7 +74,7 @@ def run_scraper(worker_id: int, proxy_manager) -> None:
         proxy_manager.mark_success(current_proxy)
         consecutive_failures = 0
 
-        img_src = parse_screenshot_page(resp.text)
+        img_src = parse_screenshot_page(html)
         if img_src:
             inserted = database.insert_screenshot(screenshot_id, url, img_src, state="discovered")
             if inserted:
