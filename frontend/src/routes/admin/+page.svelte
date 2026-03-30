@@ -413,6 +413,18 @@
 			{/each}
 		</div>
 
+		{#if (stats.screenshots.counts_by_state['failed'] || 0) + (stats.screenshots.counts_by_state['skipped'] || 0) > 0}
+			<button
+				class="btn retry-btn"
+				onclick={async () => {
+					const res = await admin.retryFailed();
+					settingsMsg = res.message;
+					const [s] = await Promise.all([admin.stats()]);
+					stats = s;
+				}}
+			>retry failed downloads</button>
+		{/if}
+
 	{:else if tab === 'processes'}
 		<div class="process-list">
 			{#each ['scraper', 'downloader', 'ocr'] as name}
@@ -1134,6 +1146,10 @@
 		font-family: "SF Mono", "Menlo", "Consolas", monospace;
 		font-size: 11px;
 		color: var(--text-dim);
+	}
+
+	.retry-btn {
+		margin-top: 12px;
 	}
 
 	/* Process controls */

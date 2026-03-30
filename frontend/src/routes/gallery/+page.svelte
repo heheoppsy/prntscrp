@@ -141,7 +141,7 @@
 		try {
 			let result;
 			if (activeQuery) {
-				result = await searchApi(activeQuery, p, perPage, searchMode);
+				result = await searchApi(activeQuery, p, perPage, searchMode, sortBy, sortDir);
 			} else {
 				result = await gallery.list(p, perPage, buildParams());
 			}

@@ -134,10 +134,16 @@ export const gallery = {
 };
 
 // Search
-export const search = (query: string, page = 1, perPage = 24, mode: 'text' | 'regex' = 'text') =>
-	request<PaginatedResponse<Screenshot & { highlighted_text?: string }>>(
-		`/search?q=${encodeURIComponent(query)}&page=${page}&per_page=${perPage}&mode=${mode}`
+export const search = (query: string, page = 1, perPage = 24, mode: 'text' | 'regex' = 'text', sort?: string, dir?: string) => {
+	const params = new URLSearchParams({
+		q: query, page: String(page), per_page: String(perPage), mode
+	});
+	if (sort) params.set('sort', sort);
+	if (dir) params.set('dir', dir);
+	return request<PaginatedResponse<Screenshot & { highlighted_text?: string }>>(
+		`/search?${params}`
 	);
+};
 
 export interface ProcessStatus {
 	running: boolean;
@@ -195,6 +201,8 @@ export const admin = {
 				body: JSON.stringify(settings)
 			})
 	},
+	retryFailed: () =>
+		request<{ message: string; count: number }>('/admin/retry-failed', { method: 'POST' }),
 	ocr: {
 		rebuild: () =>
 			request<{ message: string; reset: number }>('/admin/ocr/rebuild', { method: 'POST' }),

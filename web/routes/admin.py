@@ -387,6 +387,29 @@ def purge_dead_proxies():
 # --- System stats ---
 
 
+@admin_bp.route("/retry-failed", methods=["POST"])
+@admin_required
+def retry_failed():
+    """Move retryable skipped/failed items back to discovered."""
+    with database.get_db() as conn:
+        result = conn.execute(
+            """UPDATE screenshots
+               SET state = 'discovered', filter_matched_pattern = NULL,
+                   local_filename = NULL, file_size_bytes = NULL,
+                   image_hash = NULL, image_format = NULL,
+                   claimed_by = NULL, claimed_at = NULL
+               WHERE state IN ('skipped', 'failed')
+               AND filter_matched_pattern IN ('download_error', 'http_502', 'http_520', 'blocked_host')
+               AND img_src IS NOT NULL AND img_src != 'no_image'
+               RETURNING id"""
+        ).fetchall()
+
+    return jsonify({
+        "message": f"Re-queued {len(result)} screenshots for retry",
+        "count": len(result),
+    }), 200
+
+
 @admin_bp.route("/stats", methods=["GET"])
 @admin_required
 def system_stats():
